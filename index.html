@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku dengan Efek & Animasi</title>
-  <!-- Memuat library Canvas Confetti untuk animasi perayaan -->
+  <title>Mini Game Sudoku dengan Validasi & Animasi</title>
+  <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
     :root {
@@ -15,8 +15,9 @@
       --cell-highlight: #dbeafe;
       --cell-selected: #bfdbfe;
       --cell-same-num: #fef08a;
-      --cell-completed-num: #bbf7d0; /* Warna hijau lembut saat angka 1-9 selesai */
-      --error-color: #fecaca;
+      --cell-completed-num: #bbf7d0;
+      --error-color: #fee2e2;
+      --error-text: #dc2626;
       --primary-btn: #007bff;
       --primary-btn-hover: #0056b3;
     }
@@ -90,7 +91,6 @@
       transition: background-color 0.2s ease, transform 0.1s ease;
     }
 
-    /* Animasi denyut kecil saat sel berhasil diisi benar */
     @keyframes pulse {
       0% { transform: scale(1); }
       50% { transform: scale(1.1); }
@@ -123,7 +123,6 @@
       background-color: var(--cell-same-num);
     }
 
-    /* Efek khusus saat satu angka penuh 9 buah di papan */
     .cell.number-finished {
       background-color: var(--cell-completed-num) !important;
       color: #166534 !important;
@@ -135,9 +134,10 @@
       z-index: 2;
     }
 
-    .cell.invalid {
+    /* Otomatis merah jika salah isi */
+    .cell.invalid-live {
       background-color: var(--error-color) !important;
-      color: #991b1b;
+      color: var(--error-text) !important;
     }
 
     .controls {
@@ -207,7 +207,6 @@
     let timerInterval = null;
     let secondsElapsed = 0;
 
-    // Track status pencapaian agar animasi tidak berulang-ulang untuk hal yang sama
     let completedRows = new Array(9).fill(false);
     let completedNumbers = new Array(10).fill(false);
 
@@ -224,22 +223,28 @@
       gainNode.connect(audioCtx.destination);
 
       if (type === 'input') {
-        osc.frequency.setValueAtTime(440, audioCtx.currentTime); // Nada A4
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
         gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.1);
+      } else if (type === 'error') {
+        // Nada rendah untuk peringatan salah
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
       } else if (type === 'rowComplete') {
-        // Efek nada gembira naik (Chime)
-        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
-        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // G5
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2);
         gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.4);
       } else if (type === 'numComplete') {
-        // Efek nada sukses angka
         osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
         osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
         gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
@@ -247,7 +252,6 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 0.35);
       } else if (type === 'win') {
-        // Nada kemenangan megah
         const notes = [523.25, 659.25, 783.99, 1046.50];
         notes.forEach((freq, idx) => {
           const o = audioCtx.createOscillator();
@@ -369,53 +373,60 @@
       });
     }
 
-    // --- CEK PENCAPAIAN REAL-TIME (BARIS & ANGKA) ---
-    function checkRealtimeProgress() {
+    // --- CEK PENCAPAIAN & VALIDASI OTOMATIS MERAH ---
+    function checkRealtimeProgress(changedInput) {
+      const r = parseInt(changedInput.dataset.row);
+      const c = parseInt(changedInput.dataset.col);
+      const val = parseInt(changedInput.value) || 0;
+
+      // Validasi langsung kotak yang diisi
+      if (val !== 0 && val !== solutionBoard[r][c]) {
+        changedInput.classList.add('invalid-live');
+        playSound('error');
+      } else {
+        changedInput.classList.remove('invalid-live');
+      }
+
       const inputs = document.querySelectorAll('.cell');
       let currentBoardValues = Array.from({ length: 9 }, () => Array(9).fill(0));
 
       inputs.forEach(input => {
-        const r = parseInt(input.dataset.row);
-        const c = parseInt(input.dataset.col);
-        const val = parseInt(input.value) || 0;
-        currentBoardValues[r][c] = val;
+        const row = parseInt(input.dataset.row);
+        const col = parseInt(input.dataset.col);
+        const value = parseInt(input.value) || 0;
+        currentBoardValues[row][col] = value;
       });
 
-      // 1. Cek apakah ada BARIS yang sudah lengkap terisi dan benar
-      for (let r = 0; r < 9; r++) {
+      // 1. Cek baris selesai
+      for (let rowIdx = 0; rowIdx < 9; rowIdx++) {
         let isRowFull = true;
         let isRowCorrect = true;
-        for (let c = 0; c < 9; c++) {
-          if (currentBoardValues[r][c] === 0) isRowFull = false;
-          if (currentBoardValues[r][c] !== solutionBoard[r][c]) isRowCorrect = false;
+        for (let colIdx = 0; colIdx < 9; colIdx++) {
+          if (currentBoardValues[rowIdx][colIdx] === 0) isRowFull = false;
+          if (currentBoardValues[rowIdx][colIdx] !== solutionBoard[rowIdx][colIdx]) isRowCorrect = false;
         }
 
-        if (isRowFull && isRowCorrect && !completedRows[r]) {
-          completedRows[r] = true;
+        if (isRowFull && isRowCorrect && !completedRows[rowIdx]) {
+          completedRows[rowIdx] = true;
           playSound('rowComplete');
-          // Efek confetti kecil di sekitar area baris/papan
-          confetti({
-            particleCount: 40,
-            spread: 60,
-            origin: { y: 0.5 }
-          });
+          confetti({ particleCount: 40, spread: 60, origin: { y: 0.5 } });
           statusMsg.style.color = '#0284c7';
-          statusMsg.textContent = `Hebat! Baris ke-${r + 1} selesai! ✨`;
+          statusMsg.textContent = `Hebat! Baris ke-${rowIdx + 1} selesai! ✨`;
           setTimeout(() => { if(statusMsg.textContent.includes('Baris')) statusMsg.textContent = ''; }, 3000);
         }
       }
 
-      // 2. Cek apakah ada ANGKA (1-9) yang sudah genap 9 buah di seluruh papan dengan benar
+      // 2. Cek angka 1-9 lengkap
       for (let num = 1; num <= 9; num++) {
         let count = 0;
         let allCorrect = true;
         inputs.forEach(input => {
-          const r = parseInt(input.dataset.row);
-          const c = parseInt(input.dataset.col);
-          const val = parseInt(input.value) || 0;
-          if (val === num) {
+          const row = parseInt(input.dataset.row);
+          const col = parseInt(input.dataset.col);
+          const value = parseInt(input.value) || 0;
+          if (value === num) {
             count++;
-            if (val !== solutionBoard[r][c]) allCorrect = false;
+            if (value !== solutionBoard[row][col]) allCorrect = false;
           }
         });
 
@@ -423,7 +434,6 @@
           completedNumbers[num] = true;
           playSound('numComplete');
           
-          // Tandai semua sel dengan angka tersebut dengan warna hijau spesial
           inputs.forEach(input => {
             if (parseInt(input.value) === num) {
               input.classList.add('number-finished');
@@ -432,11 +442,7 @@
             }
           });
 
-          confetti({
-            particleCount: 70,
-            spread: 90,
-            origin: { y: 0.4 }
-          });
+          confetti({ particleCount: 70, spread: 90, origin: { y: 0.4 } });
           statusMsg.style.color = '#16a34a';
           statusMsg.textContent = `Angka [ ${num} ] sudah lengkap semua! 🎉`;
           setTimeout(() => { if(statusMsg.textContent.includes('lengkap')) statusMsg.textContent = ''; }, 3000);
@@ -472,7 +478,7 @@
                 setTimeout(() => e.target.classList.remove('pop'), 200);
               }
               applyHighlight(e.target);
-              checkRealtimeProgress();
+              checkRealtimeProgress(e.target);
             });
           }
 
@@ -482,7 +488,6 @@
       }
     }
 
-    // --- TOMBOL CEK / KEMENANGAN TOTAL ---
     function checkSolution() {
       const inputs = document.querySelectorAll('.cell');
       let isCorrect = true;
@@ -493,13 +498,11 @@
         const c = parseInt(input.dataset.col);
         const val = parseInt(input.value) || 0;
 
-        input.classList.remove('invalid');
-
         if (val === 0) {
           isComplete = false;
         } else if (val !== solutionBoard[r][c]) {
           isCorrect = false;
-          input.classList.add('invalid');
+          input.classList.add('invalid-live');
         }
       });
 
@@ -515,22 +518,11 @@
         statusMsg.style.color = '#16a34a';
         statusMsg.textContent = `Selamat! Kamu berhasil menamatkan Sudoku dalam waktu ${timerElement.textContent}! 🏆`;
 
-        // Ledakan kembang api / confetti meriah bertubi-tubi
         var duration = 3 * 1000;
         var end = Date.now() + duration;
         (function frame() {
-          confetti({
-            particleCount: 5,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0 }
-          });
-          confetti({
-            particleCount: 5,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1 }
-          });
+          confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+          confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
           if (Date.now() < end) {
             requestAnimationFrame(frame);
           }
