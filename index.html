@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku dengan Validasi & Animasi</title>
+  <title>Mini Game Sudoku</title>
   <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
@@ -112,7 +112,7 @@
 
     .cell.readonly {
       background-color: var(--cell-readonly-bg);
-      color: #0f172a;
+      color: #0f172a !important;
     }
 
     .cell.highlighted {
@@ -134,7 +134,7 @@
       z-index: 2;
     }
 
-    /* Otomatis merah jika salah isi */
+    /* Memaksa warna merah tampil saat salah isi */
     .cell.invalid-live {
       background-color: var(--error-color) !important;
       color: var(--error-text) !important;
@@ -229,7 +229,6 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 0.1);
       } else if (type === 'error') {
-        // Nada rendah untuk peringatan salah
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(150, audioCtx.currentTime);
         gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
