@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku</title>
+  <title>Mini Game Sudoku dengan Panel Angka Samping</title>
   <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
@@ -41,7 +41,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      width: 411px;
+      width: 530px;
       margin-bottom: 15px;
     }
 
@@ -65,6 +65,13 @@
       outline: none;
       cursor: pointer;
       background: #fff;
+    }
+
+    /* Layout Utama: Papan di Kiri, Panel Angka di Kanan */
+    .game-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
     }
 
     #sudoku-board {
@@ -120,7 +127,7 @@
     }
 
     .cell.same-number {
-      background-color: var(--cell-same-num);
+      background-color: var(--cell-same-num) !important;
     }
 
     .cell.number-finished {
@@ -134,19 +141,60 @@
       z-index: 2;
     }
 
-    /* Memaksa warna merah tampil saat salah isi */
     .cell.invalid-live {
       background-color: var(--error-color) !important;
       color: var(--error-text) !important;
     }
 
-    .controls {
+    /* --- PANEL KEYPAD ANGKA DI SEBELAH KANAN --- */
+    .number-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .num-btn {
+      width: 45px;
+      height: 45px;
+      font-size: 20px;
+      font-weight: bold;
+      background-color: #ffffff;
+      color: #0284c7;
+      border: 2px solid #0284c7;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      transition: all 0.15s ease;
+    }
+
+    .num-btn:hover:not(:disabled) {
+      background-color: #e0f2fe;
+      transform: translateY(-2px);
+    }
+
+    /* Style khusus tombol saat angka sudah tamat (disabled & beda warna) */
+    .num-btn:disabled {
+      background-color: #cbd5e1 !important;
+      color: #64748b !important;
+      border-color: #94a3b8 !important;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+      opacity: 0.7;
+    }
+
+    .main-controls {
       margin-top: 20px;
       display: flex;
       gap: 10px;
+      justify-content: center;
+      width: 100%;
     }
 
-    button {
+    button.action-btn {
       padding: 10px 20px;
       font-size: 14px;
       font-weight: bold;
@@ -159,7 +207,7 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    button:hover {
+    button.action-btn:hover {
       background-color: var(--primary-btn-hover);
     }
 
@@ -188,17 +236,26 @@
     <div class="timer" id="timer">00:00</div>
   </div>
 
-  <div id="sudoku-board"></div>
+  <!-- Area Papan & Panel Angka Samping -->
+  <div class="game-container">
+    <div id="sudoku-board"></div>
+    
+    <!-- Panel Samping (Keypad Angka 1-9) -->
+    <div class="number-panel" id="number-panel">
+      <!-- Tombol angka 1 sampai 9 digenerate lewat JS -->
+    </div>
+  </div>
 
-  <div class="controls">
-    <button onclick="checkSolution()">Cek Jawaban</button>
-    <button onclick="startNewGame()">Game Baru</button>
+  <div class="main-controls">
+    <button class="action-btn" onclick="checkSolution()">Cek Jawaban</button>
+    <button class="action-btn" onclick="startNewGame()">Game Baru</button>
   </div>
 
   <p id="status-msg"></p>
 
   <script>
     const boardContainer = document.getElementById('sudoku-board');
+    const panelContainer = document.getElementById('number-panel');
     const timerElement = document.getElementById('timer');
     const statusMsg = document.getElementById('status-msg');
 
@@ -372,13 +429,66 @@
       });
     }
 
+    // --- FUNGSI HIGHLIGHT KETIKA KLIK TOMBOL ANGKA DI PANEL SAMPING ---
+    function highlightNumberFromPanel(num) {
+      clearHighlights();
+      playSound('input');
+      document.querySelectorAll('.cell').forEach(cell => {
+        if (cell.value == num) {
+          cell.classList.add('same-number');
+        }
+      });
+    }
+
+    // --- MEMBUAT PANEL TOMBOL ANGKA DI SEBELAH KANAN ---
+    function createNumberPanel() {
+      panelContainer.innerHTML = '';
+      for (let num = 1; num <= 9; num++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.classList.add('num-btn');
+        btn.id = `num-btn-${num}`;
+        btn.textContent = num;
+        // Klik tombol samping untuk melihat highlight seluruh angka tersebut di papan
+        btn.addEventListener('click', () => highlightNumberFromPanel(num));
+        panelContainer.appendChild(btn);
+      }
+    }
+
+    // --- CEK STATUS APAKAH ANGKA SUDAH LENGKAP 9 BUAH DI PAPAN ---
+    function updatePanelStatus() {
+      for (let num = 1; num <= 9; num++) {
+        let count = 0;
+        let allCorrect = true;
+        const inputs = document.querySelectorAll('.cell');
+
+        inputs.forEach(input => {
+          const r = parseInt(input.dataset.row);
+          const c = parseInt(input.dataset.col);
+          const val = parseInt(input.value) || 0;
+          if (val === num) {
+            count++;
+            if (val !== solutionBoard[r][c]) allCorrect = false;
+          }
+        });
+
+        const btn = document.getElementById(`num-btn-${num}`);
+        if (btn) {
+          if (count === 9 && allCorrect) {
+            btn.disabled = true; // Tombol terkunci & otomatis berubah warna abu-abu redup
+          } else {
+            btn.disabled = false; // Masih bisa dipencet
+          }
+        }
+      }
+    }
+
     // --- CEK PENCAPAIAN & VALIDASI OTOMATIS MERAH ---
     function checkRealtimeProgress(changedInput) {
       const r = parseInt(changedInput.dataset.row);
       const c = parseInt(changedInput.dataset.col);
       const val = parseInt(changedInput.value) || 0;
 
-      // Validasi langsung kotak yang diisi
       if (val !== 0 && val !== solutionBoard[r][c]) {
         changedInput.classList.add('invalid-live');
         playSound('error');
@@ -447,12 +557,16 @@
           setTimeout(() => { if(statusMsg.textContent.includes('lengkap')) statusMsg.textContent = ''; }, 3000);
         }
       }
+
+      // Update status tombol di panel samping
+      updatePanelStatus();
     }
 
     function createBoard() {
       boardContainer.innerHTML = '';
       completedRows = new Array(9).fill(false);
       completedNumbers = new Array(10).fill(false);
+      createNumberPanel();
 
       for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
@@ -485,6 +599,7 @@
           boardContainer.appendChild(input);
         }
       }
+      updatePanelStatus();
     }
 
     function checkSolution() {
@@ -539,7 +654,7 @@
     }
 
     document.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('cell') && e.target.tagName !== 'SELECT') {
+      if (!e.target.classList.contains('cell') && !e.target.classList.contains('num-btn') && e.target.tagName !== 'SELECT') {
         clearHighlights();
       }
     });
