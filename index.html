@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Game Sudoku</title>
+  <style>
+    :root {
+      --bg-color: #f4f6f8;
+      --board-border: #333;
+      --cell-bg: #ffffff;
+      --cell-readonly-bg: #eaeff5;
+      --cell-highlight: #e8f4fe;
+      --cell-selected: #b3d7ff;
+      --cell-same-num: #ffd54f;
+      --error-color: #ffcdd2;
+      --primary-btn: #007bff;
+      --primary-btn-hover: #0056b3;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: var(--bg-color);
+      padding: 20px;
+      margin: 0;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 360px;
+      margin-bottom: 15px;
+    }
+
+    .timer {
+      font-size: 18px;
+      font-weight: bold;
+      color: #444;
+      background: #fff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    select {
+      padding: 6px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      outline: none;
+      cursor: pointer;
+    }
+
+    #sudoku-board {
+      display: grid;
+      grid-template-columns: repeat(9, 40px);
+      grid-template-rows: repeat(9, 40px);
+      gap: 1px;
+      background-color: var(--board-border);
+      border: 3px solid var(--board-border);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .cell {
+      width: 40px;
+      height: 40px;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      border: none;
+      outline: none;
+      background-color: var(--cell-bg);
+      color: #0056b3;
+      transition: background-color 0.15s ease;
+    }
+
+    /* Pembatas blok 3x3 */
+    .cell:nth-child(3n) { border-right: 2px solid var(--board-border); }
+    .cell:nth-child(9n) { border-right: none; }
+    #sudoku-board > input:nth-child(n+19):nth-child(-n+27),
+    #sudoku-board > input:nth-child(n+46):nth-child(-n+54) {
+      border-bottom: 2px solid var(--board-border);
+    }
+
+    /* Style Sel */
+    .cell.readonly {
+      background-color: var(--cell-readonly-bg);
+      color: #222;
+    }
+
+    .cell.highlighted {
+      background-color: var(--cell-highlight);
+    }
+
+    .cell.same-number {
+      background-color: var(--cell-same-num);
+    }
+
+    .cell.selected {
+      background-color: var(--cell-selected) !important;
+    }
+
+    .cell.invalid {
+      background-color: var(--error-color) !important;
+      color: #d32f2f;
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      background-color: var(--primary-btn);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: var(--primary-btn-hover);
+    }
+
+    #status-msg {
+      margin-top: 15px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Sudoku Mini</h1>
+
+  <div class="top-bar">
+    <div>
+      <label for="difficulty"><strong>Tingkat:</strong> </label>
+      <select id="difficulty" onchange="startNewGame()">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </div>
+    <div class="timer" id="timer">00:00</div>
+  </div>
+
+  <div id="sudoku-board"></div>
+
+  <div class="controls">
+    <button onclick="checkSolution()">Cek Jawaban</button>
+    <button onclick="startNewGame()">Game Baru</button>
+  </div>
+
+  <p id="status-msg"></p>
+
+  <script>
+    const boardContainer = document.getElementById('sudoku-board');
+    const timerElement = document.getElementById('timer');
+    const statusMsg = document.getElementById('status-msg');
+
+    let solutionBoard = [];
+    let initialBoard = [];
+    let timerInterval = null;
+    let secondsElapsed = 0;
+
+    // --- 1. LOGIKA GENERATOR SUDOKU (BACKTRACKING) ---
+    function isValidPlacement(board, row, col, num) {
+      for (let i = 0; i < 9; i++) {
+        if (board[row][i] === num) return false;
+        if (board[i][col] === num) return false;
+        const boxRow = 3 * Math.floor(row / 3) + Math.floor(i / 3);
+        const boxCol = 3 * Math.floor(col / 3) + (i % 3);
+        if (board[boxRow][boxCol] === num) return false;
+      }
+      return true;
+    }
+
+    function solveSudoku(board) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (board[r][c] === 0) {
+            const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+            for (let num of numbers) {
+              if (isValidPlacement(board, r, c, num)) {
+                board[r][c] = num;
+                if (solveSudoku(board)) return true;
+                board[r][c] = 0;
+              }
+            }
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function generateFullBoard() {
+      const board = Array.from({ length: 9 }, () => Array(9).fill(0));
+      solveSudoku(board);
+      return board;
+    }
+
+    function generatePuzzle(difficulty) {
+      solutionBoard = generateFullBoard();
+      initialBoard = solutionBoard.map(row => [...row]);
+
+      let removeCount = 40; // Default Medium
+      if (difficulty === 'easy') removeCount = 30;
+      if (difficulty === 'hard') removeCount = 52;
+
+      let removed = 0;
+      while (removed < removeCount) {
+        const r = Math.floor(Math.random() * 9);
+        const c = Math.floor(Math.random() * 9);
+        if (initialBoard[r][c] !== 0) {
+          initialBoard[r][c] = 0;
+          removed++;
+        }
+      }
+    }
+
+    // --- 2. LOGIKA TIMER ---
+    function startTimer() {
+      clearInterval(timerInterval);
+      secondsElapsed = 0;
+      updateTimerDisplay();
+      timerInterval = setInterval(() => {
+        secondsElapsed++;
+        updateTimerDisplay();
+      }, 1000);
+    }
+
+    function updateTimerDisplay() {
+      const mins = Math.floor(secondsElapsed / 60).toString().padStart(2, '0');
+      const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+      timerElement.textContent = `${mins}:${secs}`;
+    }
+
+    // --- 3. LOGIKA HIGHLIGHTING ---
+    function clearHighlights() {
+      document.querySelectorAll('.cell').forEach(cell => {
+        cell.classList.remove('highlighted', 'selected', 'same-number');
+      });
+    }
+
+    function applyHighlight(selectedCell) {
+      clearHighlights();
+      if (!selectedCell) return;
+
+      const selRow = parseInt(selectedCell.dataset.row);
+      const selCol = parseInt(selectedCell.dataset.col);
+      const selBoxRow = Math.floor(selRow / 3);
+      const selBoxCol = Math.floor(selCol / 3);
+      const selValue = selectedCell.value;
+
+      selectedCell.classList.add('selected');
+
+      document.querySelectorAll('.cell').forEach(cell => {
+        const r = parseInt(cell.dataset.row);
+        const c = parseInt(cell.dataset.col);
+        const boxRow = Math.floor(r / 3);
+        const boxCol = Math.floor(c / 3);
+
+        // Highlight baris, kolom, dan sub-grid 3x3 yang sama
+        if (r === selRow || c === selCol || (boxRow === selBoxRow && boxCol === selBoxCol)) {
+          if (cell !== selectedCell) cell.classList.add('highlighted');
+        }
+
+        // Highlight angka yang sama di seluruh papan
+        if (selValue && cell.value === selValue && cell !== selectedCell) {
+          cell.classList.add('same-number');
+        }
+      });
+    }
+
+    // --- 4. RENDER BOARD & INTERAKSI ---
+    function createBoard() {
+      boardContainer.innerHTML = '';
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.maxLength = 1;
+          input.classList.add('cell');
+          input.dataset.row = r;
+          input.dataset.col = c;
+
+          const val = initialBoard[r][c];
+          if (val !== 0) {
+            input.value = val;
+            input.readOnly = true;
+            input.classList.add('readonly');
+          } else {
+            input.addEventListener('input', (e) => {
+              e.target.value = e.target.value.replace(/[^1-9]/g, '');
+              applyHighlight(e.target);
+            });
+          }
+
+          // Event listener untuk Highlighting saat diklik
+          input.addEventListener('focus', (e) => applyHighlight(e.target));
+
+          boardContainer.appendChild(input);
+        }
+      }
+    }
+
+    // --- 5. CEK JAWABAN ---
+    function checkSolution() {
+      const inputs = document.querySelectorAll('.cell');
+      let isCorrect = true;
+      let isComplete = true;
+
+      inputs.forEach(input => {
+        const r = parseInt(input.dataset.row);
+        const c = parseInt(input.dataset.col);
+        const val = parseInt(input.value) || 0;
+
+        input.classList.remove('invalid');
+
+        if (val === 0) {
+          isComplete = false;
+        } else if (val !== solutionBoard[r][c]) {
+          isCorrect = false;
+          input.classList.add('invalid');
+        }
+      });
+
+      if (!isComplete) {
+        statusMsg.style.color = '#d9534f';
+        statusMsg.textContent = 'Masih ada angka yang belum diisi!';
+      } else if (!isCorrect) {
+        statusMsg.style.color = '#d9534f';
+        statusMsg.textContent = 'Ada angka yang belum tepat (ditandai warna merah). Coba periksa lagi!';
+      } else {
+        clearInterval(timerInterval);
+        statusMsg.style.color = '#28a745';
+        statusMsg.textContent = `Selamat! Kamu berhasil dalam waktu ${timerElement.textContent}! 🎉`;
+      }
+    }
+
+    // --- 6. START GAME BARU ---
+    function startNewGame() {
+      statusMsg.textContent = '';
+      clearHighlights();
+      const diff = document.getElementById('difficulty').value;
+      generatePuzzle(diff);
+      createBoard();
+      startTimer();
+    }
+
+    // Klik di luar papan untuk menghilangkan highlight
+    document.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('cell') && e.target.tagName !== 'SELECT') {
+        clearHighlights();
+      }
+    });
+
+    // Jalankan game saat pertama kali dimuat
+    startNewGame();
+  </script>
+</body>
+</html>
