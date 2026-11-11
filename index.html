@@ -7,12 +7,12 @@
   <style>
     :root {
       --bg-color: #f4f6f8;
-      --board-border: #333;
+      --board-border: #2c3e50;
       --cell-bg: #ffffff;
-      --cell-readonly-bg: #eaeff5;
-      --cell-highlight: #e8f4fe;
-      --cell-selected: #b3d7ff;
-      --cell-same-num: #ffd54f;
+      --cell-readonly-bg: #e9ecef;
+      --cell-highlight: #e3f2fd;
+      --cell-selected: #bbdefb;
+      --cell-same-num: #ffe082;
       --error-color: #ffcdd2;
       --primary-btn: #007bff;
       --primary-btn-hover: #0056b3;
@@ -37,18 +37,19 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      width: 360px;
+      width: 405px;
       margin-bottom: 15px;
     }
 
     .timer {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: bold;
       color: #444;
       background: #fff;
       padding: 6px 14px;
       border-radius: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      border: 1px solid #ddd;
     }
 
     select {
@@ -59,45 +60,53 @@
       border: 1px solid #ccc;
       outline: none;
       cursor: pointer;
+      background: #fff;
     }
 
     #sudoku-board {
       display: grid;
-      grid-template-columns: repeat(9, 40px);
-      grid-template-rows: repeat(9, 40px);
-      gap: 1px;
+      grid-template-columns: repeat(9, 45px);
+      grid-template-rows: repeat(9, 45px);
+      gap: 0px;
       background-color: var(--board-border);
       border: 3px solid var(--board-border);
-      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      box-shadow: 0 6px 15px rgba(0,0,0,0.1);
       border-radius: 4px;
       overflow: hidden;
     }
 
     .cell {
-      width: 40px;
-      height: 40px;
+      width: 45px;
+      height: 45px;
       text-align: center;
       font-size: 20px;
       font-weight: bold;
-      border: none;
+      border: 1px solid #cbd5e1; /* Garis tipis antar sel */
       outline: none;
       background-color: var(--cell-bg);
-      color: #0056b3;
+      color: #1d4ed8;
       transition: background-color 0.15s ease;
+      box-sizing: border-box;
     }
 
-    /* Pembatas blok 3x3 */
-    .cell:nth-child(3n) { border-right: 2px solid var(--board-border); }
-    .cell:nth-child(9n) { border-right: none; }
+    /* --- PEMBATAS KOTAK 3x3 YANG TEGAS --- */
+    .cell:nth-child(3n) {
+      border-right: 3px solid var(--board-border);
+    }
+    .cell:nth-child(9n) {
+      border-right: 1px solid #cbd5e1;
+    }
+
+    /* Garis tebal horizontal setiap 3 baris */
     #sudoku-board > input:nth-child(n+19):nth-child(-n+27),
     #sudoku-board > input:nth-child(n+46):nth-child(-n+54) {
-      border-bottom: 2px solid var(--board-border);
+      border-bottom: 3px solid var(--board-border);
     }
 
-    /* Style Sel */
+    /* Style Warna Sel */
     .cell.readonly {
       background-color: var(--cell-readonly-bg);
-      color: #222;
+      color: #1e293b;
     }
 
     .cell.highlighted {
@@ -114,7 +123,7 @@
 
     .cell.invalid {
       background-color: var(--error-color) !important;
-      color: #d32f2f;
+      color: #b91c1c;
     }
 
     .controls {
@@ -124,7 +133,7 @@
     }
 
     button {
-      padding: 10px 18px;
+      padding: 10px 20px;
       font-size: 14px;
       font-weight: bold;
       cursor: pointer;
@@ -133,6 +142,7 @@
       border: none;
       border-radius: 6px;
       transition: background-color 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
     button:hover {
@@ -143,6 +153,7 @@
       margin-top: 15px;
       font-weight: bold;
       font-size: 16px;
+      min-height: 24px;
     }
   </style>
 </head>
@@ -181,7 +192,6 @@
     let timerInterval = null;
     let secondsElapsed = 0;
 
-    // --- 1. LOGIKA GENERATOR SUDOKU (BACKTRACKING) ---
     function isValidPlacement(board, row, col, num) {
       for (let i = 0; i < 9; i++) {
         if (board[row][i] === num) return false;
@@ -222,7 +232,7 @@
       solutionBoard = generateFullBoard();
       initialBoard = solutionBoard.map(row => [...row]);
 
-      let removeCount = 40; // Default Medium
+      let removeCount = 40;
       if (difficulty === 'easy') removeCount = 30;
       if (difficulty === 'hard') removeCount = 52;
 
@@ -237,7 +247,6 @@
       }
     }
 
-    // --- 2. LOGIKA TIMER ---
     function startTimer() {
       clearInterval(timerInterval);
       secondsElapsed = 0;
@@ -254,7 +263,6 @@
       timerElement.textContent = `${mins}:${secs}`;
     }
 
-    // --- 3. LOGIKA HIGHLIGHTING ---
     function clearHighlights() {
       document.querySelectorAll('.cell').forEach(cell => {
         cell.classList.remove('highlighted', 'selected', 'same-number');
@@ -279,19 +287,16 @@
         const boxRow = Math.floor(r / 3);
         const boxCol = Math.floor(c / 3);
 
-        // Highlight baris, kolom, dan sub-grid 3x3 yang sama
         if (r === selRow || c === selCol || (boxRow === selBoxRow && boxCol === selBoxCol)) {
           if (cell !== selectedCell) cell.classList.add('highlighted');
         }
 
-        // Highlight angka yang sama di seluruh papan
         if (selValue && cell.value === selValue && cell !== selectedCell) {
           cell.classList.add('same-number');
         }
       });
     }
 
-    // --- 4. RENDER BOARD & INTERAKSI ---
     function createBoard() {
       boardContainer.innerHTML = '';
       for (let r = 0; r < 9; r++) {
@@ -315,15 +320,12 @@
             });
           }
 
-          // Event listener untuk Highlighting saat diklik
           input.addEventListener('focus', (e) => applyHighlight(e.target));
-
           boardContainer.appendChild(input);
         }
       }
     }
 
-    // --- 5. CEK JAWABAN ---
     function checkSolution() {
       const inputs = document.querySelectorAll('.cell');
       let isCorrect = true;
@@ -357,7 +359,6 @@
       }
     }
 
-    // --- 6. START GAME BARU ---
     function startNewGame() {
       statusMsg.textContent = '';
       clearHighlights();
@@ -367,14 +368,12 @@
       startTimer();
     }
 
-    // Klik di luar papan untuk menghilangkan highlight
     document.addEventListener('click', (e) => {
       if (!e.target.classList.contains('cell') && e.target.tagName !== 'SELECT') {
         clearHighlights();
       }
     });
 
-    // Jalankan game saat pertama kali dimuat
     startNewGame();
   </script>
 </body>
