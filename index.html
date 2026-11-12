@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku Lengkap</title>
+  <title>Mini Game Sudoku Lengkap + Hint</title>
   <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
@@ -16,6 +16,7 @@
       --cell-selected: #bfdbfe;
       --cell-same-num: #fef08a;
       --cell-completed-num: #bbf7d0;
+      --cell-hint-bg: #fef08a; /* Warna kuning lembut saat kotak diberi hint */
       --error-color: #fee2e2;
       --error-text: #dc2626;
       --primary-btn: #007bff;
@@ -39,7 +40,7 @@
       margin-bottom: 10px;
     }
 
-    /* --- WADAH KONTROL ATAS & NYAWA --- */
+    /* --- WADAH KONTROL ATAS (NYAWA, HINT, TIMER, LEVEL) --- */
     .top-container {
       display: flex;
       justify-content: space-between;
@@ -48,7 +49,14 @@
       margin-bottom: 15px;
     }
 
-    .lives-container {
+    .left-status-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* Kotak Nyawa & Hint */
+    .status-box {
       display: flex;
       gap: 6px;
       align-items: center;
@@ -59,23 +67,32 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    .heart {
-      font-size: 20px;
+    .heart, .lamp {
+      font-size: 18px;
       transition: transform 0.2s ease, filter 0.2s ease;
+      cursor: default;
     }
 
-    .heart.broken {
+    /* Tombol Ikon Hint (Lampu) */
+    .lamp.active-hint {
+      cursor: pointer;
+    }
+    .lamp.active-hint:hover {
+      transform: scale(1.15);
+    }
+
+    .heart.broken, .lamp.used {
       filter: grayscale(100%) opacity(0.3);
       transform: scale(0.85);
+      cursor: not-allowed;
     }
 
-    @keyframes heartShake {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.3) rotate(-10deg); }
-      100% { transform: scale(1); }
+    @keyframes bounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.3); }
     }
-    .heart.shake {
-      animation: heartShake 0.3s ease-in-out;
+    .lamp.shake {
+      animation: bounce 0.3s ease-in-out;
     }
 
     .timer {
@@ -167,6 +184,11 @@
       color: #166534 !important;
     }
 
+    .cell.hinted {
+      background-color: var(--cell-hint-bg) !important;
+      color: #b45309 !important;
+    }
+
     .cell.selected {
       background-color: var(--cell-selected) !important;
       border: 2px solid #2563eb !important;
@@ -251,7 +273,7 @@
 
     /* --- LAYAR OVERLAY BESAR (GAME OVER & VICTORY) --- */
     .overlay-screen {
-      display: none; /* Tersembunyi secara default */
+      display: none;
       position: fixed;
       top: 0;
       left: 0;
@@ -337,12 +359,22 @@
 
   <h1>Sudoku Mini</h1>
 
-  <!-- Bagian Atas: Nyawa (Kiri) & Level/Timer (Kanan) -->
+  <!-- Bagian Atas: Nyawa & Hint (Kiri) | Level & Timer (Kanan) -->
   <div class="top-container">
-    <div class="lives-container" id="lives-display">
-      <span class="heart" id="heart-1">❤️</span>
-      <span class="heart" id="heart-2">❤️</span>
-      <span class="heart" id="heart-3">❤️</span>
+    <div class="left-status-group">
+      <!-- Indikator Nyawa -->
+      <div class="status-box" id="lives-display">
+        <span class="heart" id="heart-1">❤️</span>
+        <span class="heart" id="heart-2">❤️</span>
+        <span class="heart" id="heart-3">❤️</span>
+      </div>
+
+      <!-- Indikator & Tombol Hint (Lampu Kuning) -->
+      <div class="status-box" id="hints-display" style="cursor: pointer;" onclick="useHint()" title="Klik untuk pakai Hint">
+        <span class="lamp active-hint" id="lamp-1">💡</span>
+        <span class="lamp active-hint" id="lamp-2">💡</span>
+        <span class="lamp active-hint" id="lamp-3">💡</span>
+      </div>
     </div>
 
     <div style="display: flex; gap: 10px; align-items: center;">
@@ -373,7 +405,7 @@
   <div class="overlay-screen" id="end-overlay">
     <div class="overlay-card">
       <h2 class="overlay-title" id="overlay-title">GAME OVER</h2>
-      <p class="overlay-subtitle" id="overlay-subtitle">Nyawamu sudah habis! Jangan menyerah, coba lagi!</p>
+      <p class="overlay-subtitle" id="overlay-subtitle">Nyawamu sudah habis!</p>
       <button class="overlay-btn" onclick="closeOverlayAndRestart()">Main Lagi 🔄</button>
     </div>
   </div>
@@ -394,6 +426,7 @@
     let secondsElapsed = 0;
     
     let lives = 3;
+    let hintsLeft = 3; // Kuota Hint
     let isGameOver = false;
 
     let completedRows = new Array(9).fill(false);
@@ -417,6 +450,15 @@
         gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.1);
+      } else if (type === 'hint') {
+        // Suara gemerincing ajaib untuk hint
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
       } else if (type === 'error') {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, audioCtx.currentTime);
@@ -470,25 +512,7 @@
       }
     }
 
-    // --- TAMPILKAN LAYAR OVERLAY BESAR ---
-    function showEndOverlay(isWin) {
-      if (isWin) {
-        overlayTitle.textContent = "GAME OVER";
-        overlayTitle.className = "overlay-title win";
-        overlaySubtitle.innerHTML = `🎉 <strong>SELAMAT, SUDOKU TAMAT!</strong> 🎉<br>Kamu menyelesaikannya dalam waktu <strong>${timerElement.textContent}</strong> dengan sisa <strong>${lives} nyawa</strong>!`;
-      } else {
-        overlayTitle.textContent = "GAME OVER";
-        overlayTitle.className = "overlay-title lose";
-        overlaySubtitle.innerHTML = `💔 <strong>NYAWA HABIS!</strong> 💔<br>Kamu sudah melakukan 3 kali kesalahan.<br>Waktu bertahan: <strong>${timerElement.textContent}</strong>`;
-      }
-      endOverlay.classList.add('active');
-    }
-
-    function closeOverlayAndRestart() {
-      endOverlay.classList.remove('active');
-      startNewGame();
-    }
-
+    // --- UPDATE TAMPILAN NYAWA & HINT ---
     function updateLivesDisplay() {
       for (let i = 1; i <= 3; i++) {
         const heart = document.getElementById(`heart-${i}`);
@@ -499,6 +523,79 @@
           heart.textContent = '💔';
           heart.classList.add('broken');
         }
+      }
+    }
+
+    function updateHintsDisplay() {
+      for (let i = 1; i <= 3; i++) {
+        const lamp = document.getElementById(`lamp-${i}`);
+        if (i <= hintsLeft) {
+          lamp.textContent = '💡';
+          lamp.classList.remove('used');
+        } else {
+          lamp.textContent = '💡';
+          lamp.classList.add('used'); // Berubah jadi abu-abu redup
+        }
+      }
+    }
+
+    // --- FUNGSI SAAT IKON HINT DIKLIK ---
+    function useHint() {
+      if (isGameOver || hintsLeft <= 0) return;
+
+      // Cari kotak kosong atau kotak yang isinya masih salah di papan
+      const inputs = document.querySelectorAll('.cell:not(.readonly)');
+      let targetInput = null;
+
+      // Utamakan pilih kotak yang sedang diklik/dipilih pemain (jika kosong/salah)
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.classList.contains('cell') && !activeEl.readOnly) {
+        const r = parseInt(activeEl.dataset.row);
+        const c = parseInt(activeEl.dataset.col);
+        if (parseInt(activeEl.value) !== solutionBoard[r][c]) {
+          targetInput = activeEl;
+        }
+      }
+
+      // Jika tidak ada kotak aktif yang pas, cari kotak kosong/salah secara acak
+      if (!targetInput) {
+        const availableInputs = Array.from(inputs).filter(inp => {
+          const r = parseInt(inp.dataset.row);
+          const c = parseInt(inp.dataset.col);
+          return parseInt(inp.value) !== solutionBoard[r][c];
+        });
+
+        if (availableInputs.length > 0) {
+          targetInput = availableInputs[Math.floor(Math.random() * availableInputs.length)];
+        }
+      }
+
+      if (targetInput) {
+        const r = parseInt(targetInput.dataset.row);
+        const c = parseInt(targetInput.dataset.col);
+        
+        // Isi dengan jawaban benar secara otomatis
+        targetInput.value = solutionBoard[r][c];
+        targetInput.classList.remove('invalid-live');
+        targetInput.classList.add('hinted'); // Warnai kuning lembut
+        targetInput.classList.add('pop');
+        setTimeout(() => targetInput.classList.remove('pop'), 300);
+
+        playSound('hint');
+
+        // Kurangi kuota hint
+        hintsLeft--;
+        updateHintsDisplay();
+
+        // Efek goyang pada lampu yang baru dipakai
+        const usedLamp = document.getElementById(`lamp-${hintsLeft + 1}`);
+        if (usedLamp) {
+          usedLamp.classList.add('shake');
+          setTimeout(() => usedLamp.classList.remove('shake'), 300);
+        }
+
+        // Cek apakah dengan hint ini permainan langsung selesai
+        checkRealtimeProgress(targetInput);
       }
     }
 
@@ -662,6 +759,24 @@
       }
     }
 
+    function showEndOverlay(isWin) {
+      if (isWin) {
+        overlayTitle.textContent = "VICTORY";
+        overlayTitle.className = "overlay-title win";
+        overlaySubtitle.innerHTML = `🎉 <strong>SELAMAT, SUDOKU TAMAT!</strong> 🎉<br>Waktu: <strong>${timerElement.textContent}</strong><br>Sisa Nyawa: ❤️ <strong>${lives}</strong> | Sisa Hint: 💡 <strong>${hintsLeft}</strong>`;
+      } else {
+        overlayTitle.textContent = "GAME OVER";
+        overlayTitle.className = "overlay-title lose";
+        overlaySubtitle.innerHTML = `💔 <strong>NYAWA HABIS!</strong> 💔<br>Jangan menyerah, coba lagi ya!<br>Waktu bertahan: <strong>${timerElement.textContent}</strong>`;
+      }
+      endOverlay.classList.add('active');
+    }
+
+    function closeOverlayAndRestart() {
+      endOverlay.classList.remove('active');
+      startNewGame();
+    }
+
     // --- FUNGSI KEMENANGAN OTOMATIS ---
     function triggerWin() {
       isGameOver = true;
@@ -671,7 +786,6 @@
       document.querySelectorAll('.cell').forEach(inp => inp.readOnly = true);
       document.querySelectorAll('.num-btn').forEach(btn => btn.disabled = true);
 
-      // Ledakan Kembang Api
       var duration = 3 * 1000;
       var end = Date.now() + duration;
       (function frame() {
@@ -682,7 +796,6 @@
         }
       }());
 
-      // Munculkan layar besar GAME OVER (Tamat)
       setTimeout(() => showEndOverlay(true), 600);
     }
 
@@ -693,7 +806,8 @@
       const c = parseInt(changedInput.dataset.col);
       const val = parseInt(changedInput.value) || 0;
 
-      if (val !== 0 && val !== solutionBoard[r][c]) {
+      // Jika diisi manual oleh pemain dan salah
+      if (val !== 0 && val !== solutionBoard[r][c] && !changedInput.classList.contains('hinted')) {
         changedInput.classList.add('invalid-live');
         playSound('error');
         
@@ -706,7 +820,6 @@
           setTimeout(() => activeHeart.classList.remove('shake'), 300);
         }
 
-        // JIKA NYAWA HABIS
         if (lives <= 0) {
           isGameOver = true;
           clearInterval(timerInterval);
@@ -715,11 +828,10 @@
           document.querySelectorAll('.cell').forEach(inp => inp.readOnly = true);
           document.querySelectorAll('.num-btn').forEach(btn => btn.disabled = true);
           
-          // Munculkan layar besar GAME OVER
           setTimeout(() => showEndOverlay(false), 400);
           return;
         }
-      } else {
+      } else if (val === solutionBoard[r][c]) {
         changedInput.classList.remove('invalid-live');
       }
 
@@ -792,7 +904,6 @@
 
       updatePanelStatus();
 
-      // 3. Jika seluruh papan selesai sempurna -> Otomatis Tamat!
       if (isAllBoardCompleteAndCorrect) {
         triggerWin();
       }
@@ -822,6 +933,9 @@
             input.addEventListener('input', (e) => {
               if (isGameOver) return;
               e.target.value = e.target.value.replace(/[^1-9]/g, '');
+              // Jika pemain mengetik manual, hilangkan status tanda hint jika sebelumnya dari hint
+              e.target.classList.remove('hinted');
+
               if (e.target.value) {
                 playSound('input');
                 e.target.classList.add('pop');
@@ -878,8 +992,10 @@
       statusMsg.textContent = '';
       clearHighlights();
       lives = 3;
+      hintsLeft = 3; // Reset kuota hint jadi 3
       isGameOver = false;
       updateLivesDisplay();
+      updateHintsDisplay();
       
       const diff = document.getElementById('difficulty').value;
       generatePuzzle(diff);
@@ -888,7 +1004,7 @@
     }
 
     document.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('cell') && !e.target.classList.contains('num-btn') && e.target.tagName !== 'SELECT') {
+      if (!e.target.classList.contains('cell') && !e.target.classList.contains('num-btn') && !e.target.closest('#hints-display') && e.target.tagName !== 'SELECT') {
         clearHighlights();
       }
     });
