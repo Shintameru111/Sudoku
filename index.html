@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku dengan Sistem Nyawa</title>
+  <title>Mini Game Sudoku Lengkap</title>
   <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
@@ -30,6 +30,8 @@
       background-color: var(--bg-color);
       padding: 20px;
       margin: 0;
+      position: relative;
+      min-height: 100vh;
     }
 
     h1 {
@@ -46,7 +48,6 @@
       margin-bottom: 15px;
     }
 
-    /* Indikator Nyawa di Kiri Atas */
     .lives-container {
       display: flex;
       gap: 6px;
@@ -63,7 +64,6 @@
       transition: transform 0.2s ease, filter 0.2s ease;
     }
 
-    /* Animasi Hati Patah / Hilang */
     .heart.broken {
       filter: grayscale(100%) opacity(0.3);
       transform: scale(0.85);
@@ -248,6 +248,89 @@
       min-height: 24px;
       text-align: center;
     }
+
+    /* --- LAYAR OVERLAY BESAR (GAME OVER & VICTORY) --- */
+    .overlay-screen {
+      display: none; /* Tersembunyi secara default */
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .overlay-screen.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0.7); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .overlay-card {
+      background: #ffffff;
+      padding: 40px 50px;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 20px 35px rgba(0,0,0,0.3);
+      max-width: 400px;
+      width: 90%;
+      animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .overlay-title {
+      font-size: 42px;
+      font-weight: 900;
+      margin: 0 0 10px 0;
+      letter-spacing: 2px;
+    }
+
+    .overlay-title.lose {
+      color: #dc2626;
+      text-shadow: 2px 2px 0px #fecaca;
+    }
+
+    .overlay-title.win {
+      color: #16a34a;
+      text-shadow: 2px 2px 0px #bbf7d0;
+    }
+
+    .overlay-subtitle {
+      font-size: 16px;
+      color: #475569;
+      margin-bottom: 25px;
+      line-height: 1.5;
+    }
+
+    .overlay-btn {
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      background-color: #2563eb;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+      transition: transform 0.15s, background-color 0.2s;
+    }
+
+    .overlay-btn:hover {
+      background-color: #1d4ed8;
+      transform: translateY(-2px);
+    }
   </style>
 </head>
 <body>
@@ -257,7 +340,6 @@
   <!-- Bagian Atas: Nyawa (Kiri) & Level/Timer (Kanan) -->
   <div class="top-container">
     <div class="lives-container" id="lives-display">
-      <!-- 3 Ikon Nyawa Hati Merah -->
       <span class="heart" id="heart-1">❤️</span>
       <span class="heart" id="heart-2">❤️</span>
       <span class="heart" id="heart-3">❤️</span>
@@ -287,24 +369,37 @@
 
   <p id="status-msg"></p>
 
+  <!-- LAYAR BESAR GAME OVER / SELESAI -->
+  <div class="overlay-screen" id="end-overlay">
+    <div class="overlay-card">
+      <h2 class="overlay-title" id="overlay-title">GAME OVER</h2>
+      <p class="overlay-subtitle" id="overlay-subtitle">Nyawamu sudah habis! Jangan menyerah, coba lagi!</p>
+      <button class="overlay-btn" onclick="closeOverlayAndRestart()">Main Lagi 🔄</button>
+    </div>
+  </div>
+
   <script>
     const boardContainer = document.getElementById('sudoku-board');
     const panelContainer = document.getElementById('number-panel');
     const timerElement = document.getElementById('timer');
     const statusMsg = document.getElementById('status-msg');
+    
+    const endOverlay = document.getElementById('end-overlay');
+    const overlayTitle = document.getElementById('overlay-title');
+    const overlaySubtitle = document.getElementById('overlay-subtitle');
 
     let solutionBoard = [];
     let initialBoard = [];
     let timerInterval = null;
     let secondsElapsed = 0;
     
-    let lives = 3; // Sisa nyawa pemain
+    let lives = 3;
     let isGameOver = false;
 
     let completedRows = new Array(9).fill(false);
     let completedNumbers = new Array(10).fill(false);
 
-    // --- SOUND EFFECTS MENGGUNAKAN WEB AUDIO API ---
+    // --- SOUND EFFECTS ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function playSound(type) {
@@ -323,7 +418,6 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 0.1);
       } else if (type === 'error') {
-        // Suara salah / nyawa berkurang (Nada turun patah)
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, audioCtx.currentTime);
         osc.frequency.setValueAtTime(100, audioCtx.currentTime + 0.15);
@@ -332,7 +426,6 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 0.3);
       } else if (type === 'gameover') {
-        // Suara Game Over
         const notes = [200, 150, 100];
         notes.forEach((freq, idx) => {
           const o = audioCtx.createOscillator();
@@ -377,7 +470,25 @@
       }
     }
 
-    // --- UPDATE TAMPILAN NYAWA (HATI PATAH & ABU-ABU) ---
+    // --- TAMPILKAN LAYAR OVERLAY BESAR ---
+    function showEndOverlay(isWin) {
+      if (isWin) {
+        overlayTitle.textContent = "GAME OVER";
+        overlayTitle.className = "overlay-title win";
+        overlaySubtitle.innerHTML = `🎉 <strong>SELAMAT, SUDOKU TAMAT!</strong> 🎉<br>Kamu menyelesaikannya dalam waktu <strong>${timerElement.textContent}</strong> dengan sisa <strong>${lives} nyawa</strong>!`;
+      } else {
+        overlayTitle.textContent = "GAME OVER";
+        overlayTitle.className = "overlay-title lose";
+        overlaySubtitle.innerHTML = `💔 <strong>NYAWA HABIS!</strong> 💔<br>Kamu sudah melakukan 3 kali kesalahan.<br>Waktu bertahan: <strong>${timerElement.textContent}</strong>`;
+      }
+      endOverlay.classList.add('active');
+    }
+
+    function closeOverlayAndRestart() {
+      endOverlay.classList.remove('active');
+      startNewGame();
+    }
+
     function updateLivesDisplay() {
       for (let i = 1; i <= 3; i++) {
         const heart = document.getElementById(`heart-${i}`);
@@ -385,13 +496,13 @@
           heart.textContent = '❤️';
           heart.classList.remove('broken');
         } else {
-          heart.textContent = '💔'; // Berubah jadi hati patah
-          heart.classList.add('broken'); // Jadi abu-abu & redup
+          heart.textContent = '💔';
+          heart.classList.add('broken');
         }
       }
     }
 
-    // --- GENERATOR SUDOKU BACKTRACKING ---
+    // --- GENERATOR SUDOKU ---
     function isValidPlacement(board, row, col, num) {
       for (let i = 0; i < 9; i++) {
         if (board[row][i] === num) return false;
@@ -551,7 +662,30 @@
       }
     }
 
-    // --- LOGIKA PROGRESS & PENGURANGAN NYAWA ---
+    // --- FUNGSI KEMENANGAN OTOMATIS ---
+    function triggerWin() {
+      isGameOver = true;
+      clearInterval(timerInterval);
+      playSound('win');
+
+      document.querySelectorAll('.cell').forEach(inp => inp.readOnly = true);
+      document.querySelectorAll('.num-btn').forEach(btn => btn.disabled = true);
+
+      // Ledakan Kembang Api
+      var duration = 3 * 1000;
+      var end = Date.now() + duration;
+      (function frame() {
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      }());
+
+      // Munculkan layar besar GAME OVER (Tamat)
+      setTimeout(() => showEndOverlay(true), 600);
+    }
+
     function checkRealtimeProgress(changedInput) {
       if (isGameOver) return;
 
@@ -563,28 +697,26 @@
         changedInput.classList.add('invalid-live');
         playSound('error');
         
-        // Nyawa berkurang 1
         lives--;
         updateLivesDisplay();
 
-        // Efek getar pada sisa hati yang aktif
         const activeHeart = document.getElementById(`heart-${lives + 1}`);
         if (activeHeart) {
           activeHeart.classList.add('shake');
           setTimeout(() => activeHeart.classList.remove('shake'), 300);
         }
 
-        // Cek Apakah Game Over (Nyawa habis)
+        // JIKA NYAWA HABIS
         if (lives <= 0) {
           isGameOver = true;
           clearInterval(timerInterval);
           playSound('gameover');
-          statusMsg.style.color = '#dc2626';
-          statusMsg.textContent = '❌ Nyawa Habis! Game Over. Silakan klik "Game Baru" untuk mengulang.';
           
-          // Kunci semua sel papan agar tidak bisa diketik lagi
           document.querySelectorAll('.cell').forEach(inp => inp.readOnly = true);
           document.querySelectorAll('.num-btn').forEach(btn => btn.disabled = true);
+          
+          // Munculkan layar besar GAME OVER
+          setTimeout(() => showEndOverlay(false), 400);
           return;
         }
       } else {
@@ -593,12 +725,17 @@
 
       const inputs = document.querySelectorAll('.cell');
       let currentBoardValues = Array.from({ length: 9 }, () => Array(9).fill(0));
+      let isAllBoardCompleteAndCorrect = true;
 
       inputs.forEach(input => {
         const row = parseInt(input.dataset.row);
         const col = parseInt(input.dataset.col);
         const value = parseInt(input.value) || 0;
         currentBoardValues[row][col] = value;
+
+        if (value === 0 || value !== solutionBoard[row][col]) {
+          isAllBoardCompleteAndCorrect = false;
+        }
       });
 
       // 1. Cek baris selesai
@@ -654,6 +791,11 @@
       }
 
       updatePanelStatus();
+
+      // 3. Jika seluruh papan selesai sempurna -> Otomatis Tamat!
+      if (isAllBoardCompleteAndCorrect) {
+        triggerWin();
+      }
     }
 
     function createBoard() {
@@ -727,28 +869,15 @@
         statusMsg.style.color = '#d9534f';
         statusMsg.textContent = 'Ada angka yang belum tepat (ditandai warna merah). Coba periksa lagi!';
       } else {
-        isGameOver = true;
-        clearInterval(timerInterval);
-        playSound('win');
-        statusMsg.style.color = '#16a34a';
-        statusMsg.textContent = `Selamat! Kamu berhasil menamatkan Sudoku dalam waktu ${timerElement.textContent}! 🏆`;
-
-        var duration = 3 * 1000;
-        var end = Date.now() + duration;
-        (function frame() {
-          confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
-          confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
-          if (Date.now() < end) {
-            requestAnimationFrame(frame);
-          }
-        }());
+        triggerWin();
       }
     }
 
     function startNewGame() {
+      endOverlay.classList.remove('active');
       statusMsg.textContent = '';
       clearHighlights();
-      lives = 3; // Reset nyawa jadi 3
+      lives = 3;
       isGameOver = false;
       updateLivesDisplay();
       
@@ -764,7 +893,6 @@
       }
     });
 
-    // Jalankan pertama kali
     startNewGame();
   </script>
 </body>
