@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku Lengkap + Hint</title>
+  <title>Mini Game Sudoku Lengkap + Sound Hint</title>
   <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
@@ -71,12 +71,11 @@
       color: #334155;
     }
 
-    /* Kotak Tombol Hint di Sebelah Kanan Atas */
     .hint-box {
       cursor: pointer;
       border: 1.5px solid #eab308;
       background-color: #fefce8;
-      transition: background-color 0.2s, transform 0.1s;
+      transition: background-color 0.2s, transform 0.1s, border-color 0.2s;
     }
 
     .hint-box:hover {
@@ -100,6 +99,15 @@
     }
     .lamp.shake, .heart.shake {
       animation: bounce 0.3s ease-in-out;
+    }
+
+    @keyframes emptyShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    .hint-box.empty-shake {
+      animation: emptyShake 0.25s ease-in-out;
     }
 
     .timer {
@@ -164,7 +172,6 @@
       animation: pulse 0.25s ease-in-out;
     }
 
-    /* Pemisah Blok 3x3 */
     .cell:nth-child(9n+3), .cell:nth-child(9n+6) {
       border-right: 3px solid var(--board-border);
     }
@@ -367,9 +374,7 @@
 
   <h1>Sudoku Mini</h1>
 
-  <!-- Bagian Atas: Kiri (Nyawa & Level) | Kanan (Timer & Tombol Hint Lampu) -->
   <div class="top-container">
-    <!-- KIRI ATAS: Nyawa & Pilihan Tingkat Kesulitan -->
     <div class="status-group">
       <div class="status-box" id="lives-display" title="Sisa Nyawa">
         <span class="heart" id="heart-1">❤️</span>
@@ -384,7 +389,6 @@
       </select>
     </div>
 
-    <!-- KANAN ATAS: Timer & 3 Ikon Lampu Hint -->
     <div class="status-group">
       <div class="timer" id="timer">00:00</div>
 
@@ -436,7 +440,7 @@
     let lives = 3;
     let hintsLeft = 3;
     let isGameOver = false;
-    let lastSelectedCell = null; // Menyimpan kotak terakhir yang diklik pemain
+    let lastSelectedCell = null;
 
     let completedRows = new Array(9).fill(false);
     let completedNumbers = new Array(10).fill(false);
@@ -460,13 +464,33 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 0.1);
       } else if (type === 'hint') {
+        // Suara gemerincing ajaib saat memakai hint (masih ada sisa)
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1);
-        gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1); // A5
+        gainNode.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.28);
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.25);
+        osc.stop(audioCtx.currentTime + 0.28);
+      } else if (type === 'hintLastUsed') {
+        // Suara khusus saat hint terakhir dipakai & langsung habis (nada naik lalu turun tanda habis)
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime); // E5
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime + 0.12); // C5
+        osc.frequency.setValueAtTime(392.00, audioCtx.currentTime + 0.24); // G4
+        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.45);
+      } else if (type === 'hintEmpty') {
+        // Suara "tet-tot" pelan saat pemain klik hint padahal kuota sudah 0
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(130, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.22);
       } else if (type === 'error') {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, audioCtx.currentTime);
@@ -537,10 +561,12 @@
       const hintBox = document.getElementById('hints-display');
       if (hintsLeft <= 0) {
         hintBox.style.cursor = 'not-allowed';
-        hintBox.style.opacity = '0.7';
+        hintBox.style.backgroundColor = '#e2e8f0';
+        hintBox.style.borderColor = '#94a3b8';
       } else {
         hintBox.style.cursor = 'pointer';
-        hintBox.style.opacity = '1';
+        hintBox.style.backgroundColor = '#fefce8';
+        hintBox.style.borderColor = '#eab308';
       }
 
       for (let i = 1; i <= 3; i++) {
@@ -555,12 +581,24 @@
 
     // --- FUNGSI SAAT KOTAK HINT DIKLIK ---
     function useHint() {
-      if (isGameOver || hintsLeft <= 0) return;
+      if (isGameOver) return;
+
+      // Jika hint sudah habis (0), bunyikan efek suara tanda habis
+      if (hintsLeft <= 0) {
+        playSound('hintEmpty');
+        const hintBox = document.getElementById('hints-display');
+        hintBox.classList.add('empty-shake');
+        setTimeout(() => hintBox.classList.remove('empty-shake'), 250);
+        
+        statusMsg.style.color = '#d97706';
+        statusMsg.textContent = '💡 Kuota Hint sudah habis terpakai semua!';
+        setTimeout(() => { if (statusMsg.textContent.includes('Kuota Hint')) statusMsg.textContent = ''; }, 2500);
+        return;
+      }
 
       const inputs = document.querySelectorAll('.cell:not(.readonly)');
       let targetInput = null;
 
-      // Cek apakah pemain baru saja memilih kotak kosong/salah
       if (lastSelectedCell && !lastSelectedCell.readOnly) {
         const r = parseInt(lastSelectedCell.dataset.row);
         const c = parseInt(lastSelectedCell.dataset.col);
@@ -569,7 +607,6 @@
         }
       }
 
-      // Jika belum ada yang dipilih, pilihkan secara acak kotak yang belum terisi benar
       if (!targetInput) {
         const availableInputs = Array.from(inputs).filter(inp => {
           const r = parseInt(inp.dataset.row);
@@ -592,10 +629,18 @@
         targetInput.classList.add('pop');
         setTimeout(() => targetInput.classList.remove('pop'), 300);
 
-        playSound('hint');
-
         hintsLeft--;
         updateHintsDisplay();
+
+        // Mainkan suara berbeda jika ini adalah hint terakhir yang baru saja habis
+        if (hintsLeft === 0) {
+          playSound('hintLastUsed');
+          statusMsg.style.color = '#d97706';
+          statusMsg.textContent = '💡 Hint terakhir baru saja terpakai (Hint Habis)!';
+          setTimeout(() => { if (statusMsg.textContent.includes('Hint terakhir')) statusMsg.textContent = ''; }, 3000);
+        } else {
+          playSound('hint');
+        }
 
         const usedLamp = document.getElementById(`lamp-${hintsLeft + 1}`);
         if (usedLamp) {
