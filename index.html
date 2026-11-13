@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Game Sudoku: Classic & Killer Mode</title>
+  <title>Mini Game Sudoku Pro</title>
   <!-- Memuat library Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
@@ -12,9 +12,13 @@
       --board-border: #0f172a;
       --cell-bg: #ffffff;
       --cell-readonly-bg: #e2e8f0;
-      --cell-highlight: #dbeafe;
-      --cell-selected: #bfdbfe;
-      --cell-same-num: #fef08a;
+      
+      /* --- WARNA INTERAKTIF: SENTUH (HOVER) & KLIK (SELECTED) --- */
+      --cell-hover: #e0f2fe;         /* Warna saat kursor menyentuh kotak */
+      --cell-highlight: #f1f5f9;     /* Warna lembut baris/kolom/blok yang sejajar */
+      --cell-selected: #bae6fd;      /* Warna lebih pekat & jelas saat kotak diklik */
+      --cell-same-num: #fef08a;      /* Kuning cerah untuk angka yang sama */
+      
       --cell-completed-num: #bbf7d0;
       --cell-hint-bg: #fef08a;
       --error-color: #fee2e2;
@@ -47,15 +51,13 @@
       letter-spacing: 1px;
     }
 
-    /* Wrapper Utama agar lebar atas, tengah, dan bawah sejajar presisi */
     .main-wrapper {
-      width: 525px; /* 465px papan + 15px gap + 45px panel angka */
+      width: 525px;
       display: flex;
       flex-direction: column;
       gap: 14px;
     }
 
-    /* --- BARIS ATAS: NYAWA, MODE, LEVEL, TIMER, HINT --- */
     .top-container {
       display: flex;
       justify-content: space-between;
@@ -150,7 +152,6 @@
       height: 36px;
     }
 
-    /* --- AREA TENGAH: PAPAN SUDOKU & PANEL ANGKA 1-9 --- */
     .game-container {
       display: flex;
       gap: 15px;
@@ -160,7 +161,7 @@
 
     .board-wrapper {
       position: relative;
-      width: 465px; /* 9 * 50px + 8 * 1px gap + 6px border */
+      width: 465px;
       height: 465px;
     }
 
@@ -176,7 +177,6 @@
       height: 100%;
     }
 
-    /* Layar Penutup Papan Saat Game Di-Pause */
     .pause-curtain {
       display: none;
       position: absolute;
@@ -210,7 +210,6 @@
       color: #cbd5e1;
     }
 
-    /* Pembungkus Sel agar bisa menampung label petunjuk Killer Sudoku di pojok kiri atas */
     .cell-wrapper {
       position: relative;
       width: 50px;
@@ -218,7 +217,6 @@
       background-color: var(--cell-bg);
     }
 
-    /* Pemisah Blok 3x3 pada wrapper */
     .cell-wrapper:nth-child(9n+3), .cell-wrapper:nth-child(9n+6) {
       border-right: 3px solid var(--board-border);
     }
@@ -228,7 +226,6 @@
       border-bottom: 3px solid var(--board-border);
     }
 
-    /* Garis Sangkar Putus-putus untuk Killer Sudoku */
     .cage-overlay {
       position: absolute;
       top: 2px;
@@ -244,7 +241,6 @@
     .cage-left { border-left: 1.5px dashed #475569; }
     .cage-right { border-right: 1.5px dashed #475569; }
 
-    /* Teks Angka Target (+/-) di sudut kiri atas sangkar Killer Sudoku */
     .cage-label {
       position: absolute;
       top: 1px;
@@ -270,13 +266,26 @@
       outline: none;
       background-color: transparent;
       color: #1d4ed8;
-      padding-top: 6px; /* Sedikit turun agar tidak menabrak label Killer Sudoku */
-      transition: background-color 0.2s ease, transform 0.1s ease;
+      padding-top: 6px;
+      cursor: pointer;
+      transition: background-color 0.12s ease, box-shadow 0.12s ease, transform 0.1s ease;
     }
 
-    /* Jika mode classic, teks tepat di tengah vertikal */
     body.mode-classic .cell {
       padding-top: 0;
+    }
+
+    /* 1. EFEK SAAT KURSOR MENYENTUH KOTAK (HOVER) */
+    .cell:hover:not(.selected):not(.invalid-live) {
+      background-color: var(--cell-hover) !important;
+      box-shadow: inset 0 0 0 1.5px #38bdf8;
+    }
+
+    /* 2. EFEK SAAT KOTAK DIKLIK / AKTIF (SELECTED - LEBIH PEKAT & TEGAS) */
+    .cell.selected {
+      background-color: var(--cell-selected) !important;
+      box-shadow: inset 0 0 0 2.5px #0284c7 !important;
+      z-index: 5;
     }
 
     @keyframes pulse {
@@ -311,17 +320,11 @@
       color: #b45309 !important;
     }
 
-    .cell.selected {
-      background-color: var(--cell-selected) !important;
-      box-shadow: inset 0 0 0 2px #2563eb;
-    }
-
     .cell.invalid-live {
       background-color: var(--error-color) !important;
       color: var(--error-text) !important;
     }
 
-    /* --- PANEL ANGKA SAMPING KANAN --- */
     .number-panel {
       display: flex;
       flex-direction: column;
@@ -362,7 +365,6 @@
       opacity: 0.7;
     }
 
-    /* --- BARIS BAWAH: TOMBOL PAUSE & GAME BARU --- */
     .main-controls {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -412,7 +414,6 @@
       text-align: center;
     }
 
-    /* --- LAYAR OVERLAY BESAR (GAME OVER & VICTORY) --- */
     .overlay-screen {
       display: none;
       position: fixed;
@@ -501,7 +502,6 @@
   <h1>Sudoku Mini</h1>
 
   <div class="main-wrapper">
-    <!-- BARIS ATAS -->
     <div class="top-container">
       <div class="status-group">
         <div class="status-box" id="lives-display" title="Sisa Nyawa">
@@ -510,13 +510,11 @@
           <span class="heart" id="heart-3">❤️</span>
         </div>
 
-        <!-- Dropdown Pilihan Mode: Classic atau Killer -->
         <select id="game-mode" onchange="startNewGame()" title="Pilih Mode Permainan">
           <option value="classic">Classic</option>
           <option value="killer" selected>Killer (+/-)</option>
         </select>
 
-        <!-- Dropdown Tingkat Kesulitan -->
         <select id="difficulty" onchange="startNewGame()" title="Tingkat Kesulitan">
           <option value="easy">Easy</option>
           <option value="medium" selected>Medium</option>
@@ -536,11 +534,9 @@
       </div>
     </div>
 
-    <!-- BARIS TENGAH: PAPAN SUDOKU & PANEL ANGKA 1-9 -->
     <div class="game-container">
       <div class="board-wrapper">
         <div id="sudoku-board"></div>
-        <!-- Tirai Jeda -->
         <div class="pause-curtain" id="pause-curtain">
           <h2>GAME PAUSED</h2>
           <p>Permainan dihentikan sementara</p>
@@ -551,7 +547,6 @@
       <div class="number-panel" id="number-panel"></div>
     </div>
 
-    <!-- BARIS BAWAH: TOMBOL PAUSE & GAME BARU -->
     <div class="main-controls">
       <button class="action-btn btn-pause" id="pause-btn" onclick="togglePause()">Pause ⏸️</button>
       <button class="action-btn btn-new" onclick="startNewGame()">Game Baru 🔄</button>
@@ -560,7 +555,6 @@
     <p id="status-msg"></p>
   </div>
 
-  <!-- LAYAR BESAR GAME OVER / SELESAI -->
   <div class="overlay-screen" id="end-overlay">
     <div class="overlay-card">
       <h2 class="overlay-title" id="overlay-title">GAME OVER</h2>
@@ -583,8 +577,8 @@
 
     let solutionBoard = [];
     let initialBoard = [];
-    let cagesGrid = []; // Menyimpan ID sangkar untuk mode Killer
-    let cageInfo = {};  // Menyimpan label hitung (+/-) tiap sangkar
+    let cagesGrid = [];
+    let cageInfo = {};
 
     let timerInterval = null;
     let secondsElapsed = 0;
@@ -598,7 +592,6 @@
     let completedRows = new Array(9).fill(false);
     let completedNumbers = new Array(10).fill(false);
 
-    // --- SOUND EFFECTS ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function playSound(type) {
@@ -823,7 +816,6 @@
       }
     }
 
-    // --- GENERATOR SUDOKU BACKTRACKING ---
     function isValidPlacement(board, row, col, num) {
       for (let i = 0; i < 9; i++) {
         if (board[row][i] === num) return false;
@@ -860,7 +852,6 @@
       return board;
     }
 
-    // --- GENERATOR SANGKAR KILLER SUDOKU (CAGES DENGAN + DAN -) ---
     function generateKillerCages() {
       cagesGrid = Array.from({ length: 9 }, () => Array(9).fill(-1));
       cageInfo = {};
@@ -869,7 +860,6 @@
       for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
           if (cagesGrid[r][c] === -1) {
-            // Tentukan ukuran sangkar secara acak (2 hingga 4 kotak)
             const targetSize = Math.floor(Math.random() * 3) + 2; 
             const cells = [[r, c]];
             cagesGrid[r][c] = cageId;
@@ -878,7 +868,6 @@
             let currC = c;
 
             for (let s = 1; s < targetSize; s++) {
-              // Cari tetangga yang belum masuk sangkar & tidak punya angka kembar
               const neighbors = [
                 [currR - 1, currC],
                 [currR + 1, currC],
@@ -887,7 +876,6 @@
               ].filter(([nr, nc]) => {
                 if (nr < 0 || nr >= 9 || nc < 0 || nc >= 9) return false;
                 if (cagesGrid[nr][nc] !== -1) return false;
-                // Pastikan angka dalam sangkar Killer Sudoku unik
                 const val = solutionBoard[nr][nc];
                 return !cells.some(([cr, cc]) => solutionBoard[cr][cc] === val);
               });
@@ -900,15 +888,13 @@
               currC = nextC;
             }
 
-            // Hitung nilai target (+ atau -) untuk sangkar ini
             const values = cells.map(([cr, cc]) => solutionBoard[cr][cc]);
             let label = "";
 
             if (values.length === 1) {
               label = `${values[0]}`;
             } else if (values.length === 2) {
-              // Jika 2 kotak: bisa pakai penjumlahan (+) atau selisih pengurangan (-)
-              const useMinus = Math.random() < 0.45; // 45% peluang pakai tanda minus (-)
+              const useMinus = Math.random() < 0.45;
               if (useMinus) {
                 const diff = Math.abs(values[0] - values[1]);
                 label = `${diff}-`;
@@ -917,12 +903,10 @@
                 label = `${sum}+`;
               }
             } else {
-              // Jika 3 atau 4 kotak: gunakan total penjumlahan (+)
               const sum = values.reduce((acc, v) => acc + v, 0);
               label = `${sum}+`;
             }
 
-            // Simpan info label pada sel paling atas-kiri sangkar
             cageInfo[cageId] = {
               topLeftCell: cells[0],
               label: label
@@ -941,7 +925,6 @@
       if (difficulty === 'easy') removeCount = 30;
       if (difficulty === 'hard') removeCount = 52;
 
-      // Di mode Killer, angka awal yang terbuka sedikit lebih banyak/seimbang karena ada bantuan sangkar
       if (mode === 'killer') {
         generateKillerCages();
         if (difficulty === 'easy') removeCount = 36;
@@ -1004,7 +987,9 @@
         const boxCol = Math.floor(c / 3);
 
         if (r === selRow || c === selCol || (boxRow === selBoxRow && boxCol === selBoxCol)) {
-          if (cell !== selectedCell) cell.classList.add('highlighted');
+          if (cell !== selectedCell) {
+            cell.classList.add('highlighted');
+          }
         }
 
         if (selValue && cell.value === selValue && cell !== selectedCell) {
@@ -1156,7 +1141,6 @@
         }
       });
 
-      // 1. Cek baris selesai
       for (let rowIdx = 0; rowIdx < 9; rowIdx++) {
         let isRowFull = true;
         let isRowCorrect = true;
@@ -1175,7 +1159,6 @@
         }
       }
 
-      // 2. Cek angka 1-9 lengkap
       for (let num = 1; num <= 9; num++) {
         let count = 0;
         let allCorrect = true;
@@ -1227,7 +1210,6 @@
           const wrapper = document.createElement('div');
           wrapper.classList.add('cell-wrapper');
 
-          // Jika Mode Killer aktif, gambar garis putus-putus sangkar dan label angka (+/-)
           if (mode === 'killer') {
             const currentCage = cagesGrid[r][c];
             const cageOverlay = document.createElement('div');
@@ -1240,7 +1222,6 @@
 
             wrapper.appendChild(cageOverlay);
 
-            // Pasang angka target (+/-) di pojok kiri atas kotak pertama sangkar
             const info = cageInfo[currentCage];
             if (info && info.topLeftCell[0] === r && info.topLeftCell[1] === c) {
               const labelSpan = document.createElement('span');
